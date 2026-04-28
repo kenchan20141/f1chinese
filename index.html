@@ -1659,41 +1659,31 @@ function displayQuestion(question) {
     startTimer();
 }
 
-function checkAnswer(isCorrect, questionId) {
-    console.log('checkAnswer called, isCorrect:', isCorrect, 'questionId:', questionId);
+function checkAnswer(isCorrect, questionId, selectedIndex) {
+    console.log('checkAnswer called, isCorrect:', isCorrect, 'questionId:', questionId, 'selectedIndex:', selectedIndex);
     // 如果問題已回答，則退出
     if (answeredQuestions.has(questionId)) return;
     answeredQuestions.add(questionId);
+    
     // 如果已回答或遊戲結束，則退出
     if (answered || gameOver) return;
     answered = true;
     
-    // ========== 新增：記錄答題歷史 ==========
+    // ========== 修訂：記錄答題歷史 ==========
     const q = window.currentQuestion;
-    if (q && questionId) {
-        // 找出用戶選擇的答案索引
-        const buttons = document.querySelectorAll('#options button');
-        let selectedIndex = -1;
-        buttons.forEach((btn, index) => {
-            if (btn.style.pointerEvents === 'none' && index !== q.correctIndex) {
-                selectedIndex = index;
-            }
-        });
-        // 如果找不到選中的錯誤答案，則設為正確答案索引（表示答對）
-        if (selectedIndex === -1 && isCorrect) {
-            selectedIndex = q.correctIndex;
-        }
-        
+    if (q && questionId && selectedIndex !== undefined) {
         questionHistory.push({
             question: q.question,
-            userAnswer: q.options[selectedIndex] || '未作答',
+            userAnswer: q.options[selectedIndex],
             correctAnswer: q.options[q.correctIndex],
             isCorrect: isCorrect
         });
+        console.log('Added to history:', questionHistory[questionHistory.length - 1]);
     }
     // ========================================
     
     clearInterval(timer);
+    
     // 樣式處理：禁用按鈕並高亮正確答案
     const buttons = document.querySelectorAll('#options button');
     const correctIndex = window.currentQuestion.correctIndex;
@@ -1750,6 +1740,7 @@ function checkAnswer(isCorrect, questionId) {
     database.ref('rooms/' + currentRoomId).once('value').then(snapshot => {
         const room = snapshot.val();
         if (!room) return;
+        
         const playerPath = isHost ? 'player1' : 'player2';
         const opponentPath = isHost ? 'player2' : 'player1';
         const playerData = room[playerPath];
@@ -1787,9 +1778,11 @@ function checkAnswer(isCorrect, questionId) {
                 }, 2000);
                 damageToPlayer = Math.floor(damageToPlayer * 0.7);
             }
+            
             // 1. 先扣減玩家的氣血
             playerHealth = Math.max(0, playerHealth - damageToPlayer);
             showDamageAnimation(damageToPlayer, 'player');
+            
             // 2. 檢查遊戲是否因玩家氣血低於或等於0而結束
             if (playerHealth <= 0) {
                 const updates = {
@@ -1799,12 +1792,14 @@ function checkAnswer(isCorrect, questionId) {
                 database.ref('rooms/' + currentRoomId).update(updates);
                 return; // 終止後續邏輯
             }
+            
             // 3. 如果遊戲未結束，應用鐵甲宗的恢復效果
             if (playerClass.type === 'tank' && !hasHealedThisTurn) {
                 hasHealedThisTurn = true;
                 const healAmount = Math.round(maxHealth * 0.02);
                 playerHealth = Math.min(maxHealth, playerHealth + healAmount);
                 showHealAnimation(healAmount, 'player'); // 顯示恢復動畫
+                
                 // UI 更新：顯示護盾圖標
                 const myHealthElement = document.getElementById('myHealth');
                 const shieldIcon = document.createElement('span');
@@ -1820,6 +1815,7 @@ function checkAnswer(isCorrect, questionId) {
         const updates = {};
         updates[`${playerPath}/health`] = playerHealth;
         updates[`${opponentPath}/health`] = opponentHealth;
+        
         // 再次檢查遊戲是否結束（例如，對手氣血降至0）
         if (opponentHealth <= 0) {
             updates['gameEnded'] = true;
@@ -1832,6 +1828,7 @@ function checkAnswer(isCorrect, questionId) {
             targetElement.classList.add('damage-flash');
             document.getElementById('gameArea').classList.add('screen-shake');
             document.querySelectorAll('.health-fill').forEach(bar => bar.classList.add('damage-effect'));
+            
             // 移除動畫
             setTimeout(() => {
                 targetElement.classList.remove('damage-flash');
@@ -1895,6 +1892,7 @@ function checkAnswer(isCorrect, questionId) {
             wave.style.background = `linear-gradient(90deg, transparent 0%, ${isCorrect ? 'rgba(46,204,113,0.3)' : 'rgba(231,76,60,0.3)'} 50%, transparent 100%)`;
             healthBar.appendChild(wave);
             setTimeout(() => wave.remove(), 500);
+            
         }).catch(error => {
             console.error('Failed to update room data:', error);
         });
@@ -1919,6 +1917,7 @@ function checkAnswer(isCorrect, questionId) {
         });
     }, 700);
 }
+    
 
 function showDodgeText() {
     const dodgeText = document.getElementById('dodgeText');
@@ -2796,21 +2795,19 @@ function displayQuestion(question) {
     document.getElementById('question').textContent = question.question;
     const optionsDiv = document.getElementById('options');
     optionsDiv.innerHTML = '';
-    
     question.options.forEach((option, index) => {
         const button = document.createElement('button');
         button.textContent = option;
         button.setAttribute('data-question-id', question.id); // 設置問題ID
         button.onclick = () => {
             if (!answeredQuestions.has(question.id)) { // 檢查是否已回答
-                checkAnswer(index === question.correctIndex, question.id);
+                checkAnswer(index === question.correctIndex, question.id, index);
             }
         };
         optionsDiv.appendChild(button);
     });
     startTimer();
 }
-
 
 function startTimer() {
     clearInterval(timer);
